@@ -68,4 +68,4 @@ jobs:
           app-name: 'chess-app'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: .  # This should point to the unzipped contents
+          package: ./dist  # This should point to the unzipped contents
