@@ -64,5 +64,5 @@ jobs:
         with:
           app-name: 'chess-app-online'
           slot-name: 'Production'
-          package: .   # This should point to where the unzipped files are
+          package: ./client/build   # This should point to where the unzipped files are
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_87A8D725461A4BF280F2BBEDB6B8973E }}
