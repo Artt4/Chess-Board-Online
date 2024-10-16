@@ -34,16 +34,16 @@ jobs:
       # Zip both client and server for deployment
       - name: Zip artifact for deployment
         run: |
-          zip -r release.zip ./client/build ./server/webconfig
+          zip -r release.zip ./client/build ./server/web.config  # Ensure web.config is included
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
           path: release.zip
+
       - name: List contents of release.zip
         run: unzip -l release.zip
-
 
   deploy:
     runs-on: ubuntu-latest
@@ -67,5 +67,5 @@ jobs:
         with:
           app-name: 'chess-app-online'
           slot-name: 'Production'
-          package: .   # This should point to where the unzipped files are
+          package: ./client/build  # Point to the unzipped client build directory
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_87A8D725461A4BF280F2BBEDB6B8973E }}
