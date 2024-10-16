@@ -34,7 +34,8 @@ jobs:
       # Zip both client and server for deployment
       - name: Zip artifact for deployment
         run: |
-          zip -r release.zip ./client/build ./server/web.config  # Ensure web.config is included
+          cp ./server/web.config ./client/build/  # Copy web.config to the build directory
+          zip -r release.zip ./client/build  # Zip the client build directory only
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
