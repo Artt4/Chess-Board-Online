@@ -1,6 +1,8 @@
 <script>
     import { onMount } from 'svelte';
     import { Chess } from 'chess.js'; // Import the Chess class
+    import { connectWebSocket, sendMessage, messages } from '../ws.js'; // Import WebSocket functions
+
   
     let board;
     let game = new Chess(); // Initialize the chess game
@@ -21,6 +23,7 @@
         onSnapEnd: onSnapEnd,
         pieceTheme: '/chessboard/img/chesspieces/wikipedia/{piece}.png',
       });
+      connectWebSocket(); // Connect to the WebSocket server
     });
 
     const onDragStart = (source, piece, position, orientation) => {
