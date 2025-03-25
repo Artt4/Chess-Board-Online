@@ -1,12 +1,23 @@
-// src/websocket.js
+// src/ws.js
 import { writable } from 'svelte/store';
 
+// Store for the current WebSocket instance
 export const ws = writable(null);
+
+// Store for all incoming messages (as raw strings)
 export const messages = writable([]);
 
+/**
+ * Connects to the specified WebSocket URL
+ */
 export function connectWebSocket() {
-    console.log('Attempting to connect WebSocket...'); // Add this line for debugging
-    const socket = new WebSocket('wss://savvy-octagon-440913-t3.ey.r.appspot.com'); // replace with your WebSocket URL
+  // Build the WebSocket URL based on the current location
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host; // e.g. localhost:8080 in production
+  const wsUrl = `${protocol}//${host}`;
+
+  console.log('Attempting to connect WebSocket to:', wsUrl);
+  const socket = new WebSocket(wsUrl);
 
   socket.onopen = () => {
     console.log('WebSocket connected');
@@ -27,9 +38,13 @@ export function connectWebSocket() {
   };
 }
 
+
+/**
+ * Sends a message over the WebSocket (if connected)
+ */
 export function sendMessage(message) {
   ws.update((socket) => {
-    if (socket) {
+    if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(message);
     }
     return socket;
