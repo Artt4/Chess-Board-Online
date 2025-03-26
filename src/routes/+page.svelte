@@ -29,7 +29,7 @@
   </script>
   
   <main>
-    <h1>Welcome to the Chess App</h1>
+    <h1>Welcome to the Chess App by Artturi</h1>
   
     <select bind:value={chosenColor}>
       <option value="white">White</option>
