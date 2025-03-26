@@ -1,0 +1,50 @@
+# cloudbuild.yaml
+steps:
+  # 1) Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      # Update this path if your Dockerfile is not in the repo root
+      - '-f'
+      - 'Dockerfile'
+      # Change the tag to match where you want to push your image
+      - '-t'
+      - 'europe-north1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/my-chess-project:$SHORT_SHA'
+      - '.'
+
+  # 2) Push the Docker image to your registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - push
+      - 'europe-north1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/my-chess-project:$SHORT_SHA'
+
+  # 3) Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud run deploy $SERVICE_NAME \
+          --image europe-north1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/my-chess-project:$SHORT_SHA \
+          --platform managed \
+          --region $REGION \
+          --allow-unauthenticated \
+          --timeout 600
+
+# Substitutions allow you to parameterize values in your build.
+# You can override them in your Cloud Build trigger settings.
+substitutions:
+  # Region where you deploy your Cloud Run service
+  _REGION: "europe-north1"
+  # Name of the Cloud Run service
+  _SERVICE_NAME: "my-chess-project"
+
+# By default, these built-in substitutions are available:
+#  - $PROJECT_ID: The Google Cloud project ID
+#  - $SHORT_SHA: The short version of the commit SHA
+#  - $REPO_NAME, $BRANCH_NAME, etc. for triggers
+
+# The images you produce must be declared if you want
+# them to appear in the "Images" section of the Build logs:
+images:
+- 'europe-north1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/my-chess-project:$SHORT_SHA'
