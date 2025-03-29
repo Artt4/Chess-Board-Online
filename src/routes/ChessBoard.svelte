@@ -147,6 +147,7 @@
   
   <div>
     <h2>Status: {status}</h2>
+    <p>TEST</p>
     <h3>PGN: {gamePGN}</h3>
     <h3>FEN: {gameFEN}</h3>
     {#if status === 'Checkmate!'}
