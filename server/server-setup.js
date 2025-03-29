@@ -32,6 +32,15 @@ export function createServerApp() {
 
     res.json({ gameCode, requestedColor });
   });
+  // In your server-setup.js, before app.use(handler)
+  app.get('/api/game-exists', (req, res) => {
+    const { gameCode } = req.query;
+    if (!gameCode || !games.has(gameCode)) {
+      res.status(404).json({ error: 'Game not found' });
+    } else {
+      res.json({ exists: true });
+    }
+  });
 
   // Let SvelteKit handle the rest of the routes
   app.use(handler);

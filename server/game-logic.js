@@ -9,6 +9,7 @@ export function handleJoin(data, socket) {
     if (!games.has(gameCode)) {
         socket.send(JSON.stringify({
           type: 'error',
+          code: "INVALID_GAME_ERROR",
           message: 'Game not found. Please create a game using the home page.'
         }));
         socket.close();
@@ -53,6 +54,7 @@ export function handleJoin(data, socket) {
             } else {
                 socket.send(JSON.stringify({
                     type: 'error',
+                    code: "GAME_FULL_ERROR",
                     message: 'Both colors are taken; game is full'
                 }));
                 socket.close();
@@ -76,6 +78,7 @@ export function handleJoin(data, socket) {
         } else {
             socket.send(JSON.stringify({
                 type: 'error',
+                code: "GAME_FULL_ERROR",
                 message: 'Game is full (2 players max)'
             }));
             socket.close();
@@ -90,6 +93,7 @@ export function handleMove(data, socket, currentGameCode) {
     if (socket !== gameObj.players.white && socket !== gameObj.players.black) {
         socket.send(JSON.stringify({
             type: 'error',
+            code: "GAME_FULL_ERROR",
             message: 'You are not a player in this game'
         }));
         return;
@@ -107,8 +111,10 @@ export function handleMove(data, socket, currentGameCode) {
     } catch (err) {
         socket.send(JSON.stringify({
             type: 'error',
+            code: "MOVE_ERROR",
             message: 'Invalid move: ' + data.move
         }));
+
     }
 }
 

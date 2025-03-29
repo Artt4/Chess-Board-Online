@@ -17,8 +17,20 @@
   let joined = false;
   let moveCounter = 0;
   let unsubscribe;
+  let loading = true; // new flag
+  let isMounted = false;
 
-  onMount(() => {
+  onMount(async() => {
+    isMounted = true;
+        // First, check with the API whether the game exists.
+    const response = await fetch(`/api/game-exists?gameCode=${gameCode}`);
+    if (!response.ok) {
+      // Redirect if the game doesn't exist.
+      goto('/?error=Game not found. Please create a game using the home page.', { replaceState: true });
+      return;
+    }
+    // If it exists, we remove any loading overlay and initialize.
+    loading = false;
     board = Chessboard('myBoard', {
       orientation: requestedColor,
       draggable: true,
@@ -57,9 +69,16 @@
 
   onDestroy(() => {
     // Clean up the subscription when the component is unmounted.
+    isMounted = false;
     if (typeof unsubscribe === 'function') {
       unsubscribe();
     }
+    // Also destroy the chessboard instance if it has a destroy method.
+    if (board && typeof board.destroy === 'function') {
+      board.destroy();
+    }
+    // Optionally, set board to null
+    board = null;
   });
 
 
@@ -106,14 +125,20 @@
       data.moves.forEach(m => game.move(m));
       board.position(game.fen());
       updateLocalStatus();
+
     } else if (data.type === 'sync' && data.moves) {
-      game.reset();
-      data.moves.forEach(m => game.move(m));
-      board.position(game.fen());
-      updateLocalStatus();
+        game.reset();
+        data.moves.forEach(m => game.move(m));
+        board.position(game.fen());
+        updateLocalStatus();
+    } else if (data.code === 'INVALID_GAME_ERROR' || data.code === 'GAME_FULL_ERROR') {
+        console.log(data.code)
+        console.log('Server error:', data.message);
+        goto(`/?error=${encodeURIComponent(data.message)}`, { replaceState: true }); 
+        return;    
     } else if (data.type === 'error') {
-      console.log('Server error:', data.message);
-      board.position(game.fen());
+        console.log('Server error:', data.message);
+        board.position(game.fen());
     }
   }
 
@@ -147,7 +172,6 @@
   
   <div>
     <h2>Status: {status}</h2>
-    <p>TEST</p>
     <h3>PGN: {gamePGN}</h3>
     <h3>FEN: {gameFEN}</h3>
     {#if status === 'Checkmate!'}
