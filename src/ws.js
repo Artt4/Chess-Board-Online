@@ -13,8 +13,8 @@ export const messages = writable([]);
 export function connectWebSocket() {
   // Build the WebSocket URL based on the current location
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = window.location.host; // e.g. localhost:8080 in production
-  const wsUrl = `${protocol}//${host}`;
+  const host = window.location.host;
+  const wsUrl = `${protocol}//${host}` //REMOVE "/ws" FOR PRODUCTION
 
   console.log('Attempting to connect WebSocket to:', wsUrl);
   const socket = new WebSocket(wsUrl);

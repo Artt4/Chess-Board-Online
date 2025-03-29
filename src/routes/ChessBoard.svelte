@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { connectWebSocket, ws, messages, sendMessage } from '../ws.js';
   import { Chess } from 'chess.js';
@@ -16,9 +16,11 @@
   let gameFEN = '';
   let joined = false;
   let moveCounter = 0;
+  let unsubscribe;
 
   onMount(() => {
     board = Chessboard('myBoard', {
+      orientation: requestedColor,
       draggable: true,
       position: 'start',
       onDragStart,
@@ -28,16 +30,21 @@
     });
 
     // Update WebSocket connection to use current host & port.
-    connectWebSocket(`ws://${window.location.host}`);
+    connectWebSocket(`ws://${window.location.host}`); //REMOVE "/ws" FOR PRODUCTION
 
-    ws.subscribe(socket => {
+    // Subscribe once to the WebSocket store.
+    unsubscribe = ws.subscribe(socket => {
       if (!joined && socket && socket.readyState === WebSocket.OPEN) {
         joined = true;
+        console.log(color)
         socket.send(JSON.stringify({
           type: 'join',
           gameCode,
           requestedColor
         }));
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
       }
     });
 
@@ -48,6 +55,14 @@
     });
   });
 
+  onDestroy(() => {
+    // Clean up the subscription when the component is unmounted.
+    if (typeof unsubscribe === 'function') {
+      unsubscribe();
+    }
+  });
+
+
   function onDragStart(source, piece) {
     if (gameOver) return false;
     if (!color) return false; // no color assigned yet
@@ -56,9 +71,7 @@
   }
 
   function onDrop(source, target) {
-    console.log("%c onDrop fired EXACTLY once", "color: red;", source, "->", target);
     const algebraicMove = source + target;
-    console.log("onDrop move string:", algebraicMove);
     moveCounter++;
     sendMessage(JSON.stringify({
       type: 'move',
@@ -71,7 +84,6 @@
   function onSnapEnd() {}
 
   function handleServerMessage(raw) {
-    console.log("handleServerMessage raw:", raw);
     let data;
     try {
       data = JSON.parse(raw);
@@ -87,6 +99,7 @@
       if (url.searchParams.get('color') !== color) {
         url.searchParams.set('color', color);
         goto(url.toString(), { replaceState: true });
+        board.orientation(color)
       }
       // Rebuild local game state
       game.reset();
@@ -106,7 +119,8 @@
 
   function updateLocalStatus() {
     if (game.isCheckmate()) {
-      status = 'Checkmate!';
+      const winnerColor = game.turn() === 'w' ? 'Black' : 'White'; // Call game.turn()
+      status = `Checkmate! ${winnerColor} won!`;
       gameOver = true;
     } else if (game.isDraw()) {
       status = 'Draw!';
@@ -129,10 +143,15 @@
 
 <main>
   <h1>{color ? color : 'Awaiting color...'} Board</h1>
-  <div id="myBoard" style="width:400px;"></div>
+    <div id="myBoard" style="width:400px;"></div>
+  
   <div>
     <h2>Status: {status}</h2>
     <h3>PGN: {gamePGN}</h3>
     <h3>FEN: {gameFEN}</h3>
+    {#if status === 'Checkmate!'}
+    <p>{'j'}</p>
+	    <p>{'White won'}</p>
+    {/if}
   </div>
 </main>
