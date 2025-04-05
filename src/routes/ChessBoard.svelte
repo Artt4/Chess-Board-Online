@@ -135,7 +135,6 @@
     }));
     // return 'snapback'; // if you want to let the server handle the final position
   }
-
   function onSnapEnd() {}
 
   function handleServerMessage(raw) {
