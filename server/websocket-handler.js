@@ -23,6 +23,14 @@ export function setupWebSocket(wss) {
         currentGameCode = handleJoin(data, socket); 
       } else if (data.type === 'move' && data.move && currentGameCode) {
         handleMove(data, socket, currentGameCode);
+      }else if (data.type === 'leave' && data.gameCode) {
+        // The client says "I'm leaving"
+        removePlayerFromGame(data.gameCode, socket);
+        const gameObj = games.get(data.gameCode);
+        if (gameObj) {
+          gameObj.clients.delete(socket);
+          removeGameIfEmpty(data.gameCode);
+        }
       }
     });
 

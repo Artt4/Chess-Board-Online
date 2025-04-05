@@ -5,8 +5,9 @@ import {games} from '../src/lib/gameRegistery.js';
 
 
 export function handleJoin(data, socket) {
-    const gameCode = data.gameCode.trim();
-    if (!games.has(gameCode)) {
+    const { gameCode, playerId, requestedColor } = data;
+    const gameObj = games.get(gameCode);
+    if (!gameObj) {
         socket.send(JSON.stringify({
           type: 'error',
           code: "INVALID_GAME_ERROR",
@@ -15,15 +16,16 @@ export function handleJoin(data, socket) {
         socket.close();
         return;
     }
-    
-    const gameObj = games.get(gameCode);
+      // Make sure we have a map from playerId → color
+    if (!gameObj.playerToColorMap) {
+        gameObj.playerToColorMap = {};
+    }
 
     // If a removal timeout was scheduled, cancel it because a player is (re)joining.
     if (gameObj.removalTimeout) {
         clearTimeout(gameObj.removalTimeout);
         gameObj.removalTimeout = null;
     }
-
 
     // If this socket is already assigned to a color, ignore the join.
     if (gameObj.players.white === socket || gameObj.players.black === socket) {
@@ -32,59 +34,82 @@ export function handleJoin(data, socket) {
     }
 
     gameObj.clients.add(socket);
-    const requestedColor = data.requestedColor; // "white"|"black"|undefined
 
-    if (requestedColor === 'white' || requestedColor === 'black') {
-        if (!gameObj.players[requestedColor]) {
-            gameObj.players[requestedColor] = socket;
-            socket.send(JSON.stringify({
-                type: 'joined',
-                color: requestedColor,
-                moves: gameObj.moveHistory
-            }));
-        } else {
-            const other = requestedColor === 'white' ? 'black' : 'white';
-            if (!gameObj.players[other]) {
-                gameObj.players[other] = socket;
-                socket.send(JSON.stringify({
-                    type: 'joined',
-                    color: other,
-                    moves: gameObj.moveHistory
-                }));
-            } else {
-                socket.send(JSON.stringify({
-                    type: 'error',
-                    code: "GAME_FULL_ERROR",
-                    message: 'Both colors are taken; game is full'
-                }));
-                socket.close();
-            }
-        }
-    } else {
-        if (!gameObj.players.white) {
-            gameObj.players.white = socket;
-            socket.send(JSON.stringify({
-                type: 'joined',
-                color: 'white',
-                moves: gameObj.moveHistory
-            }));
-        } else if (!gameObj.players.black) {
-            gameObj.players.black = socket;
-            socket.send(JSON.stringify({
-                type: 'joined',
-                color: 'black',
-                moves: gameObj.moveHistory
-            }));
-        } else {
-            socket.send(JSON.stringify({
-                type: 'error',
-                code: "GAME_FULL_ERROR",
-                message: 'Game is full (2 players max)'
-            }));
-            socket.close();
-        }
+  // --- CASE A: Player Rejoin (they have a color from a previous connection) ---
+  const existingColor = gameObj.playerToColorMap[playerId];
+  if (existingColor) {
+    // If there's an old socket still occupying that color, close it.
+    const oldSocket = gameObj.players[existingColor];
+    if (oldSocket && oldSocket !== socket && oldSocket.readyState === oldSocket.OPEN) {
+      oldSocket.close();
     }
+    // Reassign that color to this new socket
+    gameObj.players[existingColor] = socket;
+
+    socket.send(JSON.stringify({
+      type: 'joined',
+      color: existingColor,
+      moves: gameObj.moveHistory
+    }));
+
     return gameCode;
+  }
+
+  // --- CASE B: Brand-New Player ---
+  // We'll assign them a color, respecting requestedColor if possible
+  let finalColor = null;
+
+  if (requestedColor === 'white' || requestedColor === 'black') {
+    // Try requestedColor first
+    if (!gameObj.players[requestedColor]) {
+      finalColor = requestedColor;
+    } else {
+      // If requested color is taken, try the other color if it's free
+      const otherColor = (requestedColor === 'white') ? 'black' : 'white';
+      if (!gameObj.players[otherColor]) {
+        finalColor = otherColor;
+      } else {
+        // Both are taken
+        socket.send(JSON.stringify({
+          type: 'error',
+          code: 'GAME_FULL_ERROR',
+          message: 'Both colors are taken; game is full.'
+        }));
+        socket.close();
+        return;
+      }
+    }
+  } else {
+    // No specific color requested; pick whichever is free
+    if (!gameObj.players.white) {
+      finalColor = 'white';
+    } else if (!gameObj.players.black) {
+      finalColor = 'black';
+    } else {
+      // Both are taken
+      socket.send(JSON.stringify({
+        type: 'error',
+        code: 'GAME_FULL_ERROR',
+        message: 'Game is full (2 players max).'
+      }));
+      socket.close();
+      return;
+    }
+  }
+
+  // Assign finalColor to this socket
+  gameObj.players[finalColor] = socket;
+  // Record the mapping so if they reconnect, we reassign them to the same color
+  gameObj.playerToColorMap[playerId] = finalColor;
+
+  socket.send(JSON.stringify({
+    type: 'joined',
+    color: finalColor,
+    moves: gameObj.moveHistory
+  }));
+
+  return gameCode;
+
 }
 export function handleMove(data, socket, currentGameCode) {
     const gameObj = games.get(currentGameCode);
@@ -93,7 +118,7 @@ export function handleMove(data, socket, currentGameCode) {
     if (socket !== gameObj.players.white && socket !== gameObj.players.black) {
         socket.send(JSON.stringify({
             type: 'error',
-            code: "GAME_FULL_ERROR",
+            code: "NOT_A_PLAYER",
             message: 'You are not a player in this game'
         }));
         return;
@@ -130,13 +155,28 @@ export function broadcastToRoom(gameCode, msgObj) {
 }
 
 export function removePlayerFromGame(gameCode, socket) {
-    if (games.has(gameCode)) {
-        const gameObj = games.get(gameCode);
-        if (gameObj.players.white === socket) {
-            gameObj.players.white = null;
-        } else if (gameObj.players.black === socket) {
-            gameObj.players.black = null;
+    const gameObj = games.get(gameCode);
+    if (!gameObj) return;
+  
+    // If this socket is actually assigned to white or black, clear it
+    if (gameObj.players.white === socket) {
+      gameObj.players.white = null;
+      // also remove from playerToColorMap if known
+      for (const [pid, color] of Object.entries(gameObj.playerToColorMap)) {
+        if (color === 'white') {
+          delete gameObj.playerToColorMap[pid];
+          break;
         }
+      }
+    } else if (gameObj.players.black === socket) {
+      gameObj.players.black = null;
+      // also remove from playerToColorMap
+      for (const [pid, color] of Object.entries(gameObj.playerToColorMap)) {
+        if (color === 'black') {
+          delete gameObj.playerToColorMap[pid];
+          break;
+        }
+      }
     }
 }
 export function removeGameIfEmpty(gameCode) {

@@ -7,6 +7,7 @@
   export let gameCode;
   export let requestedColor;
 
+
   let color = null;
   let board;
   let game = new Chess();
@@ -16,69 +17,104 @@
   let gameFEN = '';
   let joined = false;
   let moveCounter = 0;
-  let unsubscribe;
   let loading = true; // new flag
   let isMounted = false;
+  let playerId;
+
+  let unsubscribe;
+  let unsubMessages;
+
+  function getOrCreatePlayerId() {
+    let storedId = localStorage.getItem('playerId');
+    if (!storedId) {
+      // Option A: Modern browsers
+      if (window.crypto?.randomUUID) {
+        storedId = crypto.randomUUID();
+      } else {
+        // Option B: Fallback to a less robust method
+        storedId = 'player-' + Math.random().toString(36).substring(2);
+      }
+      localStorage.setItem('playerId', storedId);
+    }
+    return storedId;
+  }
 
   onMount(async() => {
     isMounted = true;
         // First, check with the API whether the game exists.
-    const response = await fetch(`/api/game-exists?gameCode=${gameCode}`);
-    if (!response.ok) {
-      // Redirect if the game doesn't exist.
-      goto('/?error=Game not found. Please create a game using the home page.', { replaceState: true });
-      return;
-    }
-    // If it exists, we remove any loading overlay and initialize.
-    loading = false;
-    board = Chessboard('myBoard', {
-      orientation: requestedColor,
-      draggable: true,
-      position: 'start',
-      onDragStart,
-      onDrop,
-      onSnapEnd,
-      pieceTheme: '/chessboard/img/chesspieces/wikipedia/{piece}.png'
-    });
-
-    // Update WebSocket connection to use current host & port.
-    connectWebSocket(`ws://${window.location.host}`); //REMOVE "/ws" FOR PRODUCTION
-
-    // Subscribe once to the WebSocket store.
-    unsubscribe = ws.subscribe(socket => {
-      if (!joined && socket && socket.readyState === WebSocket.OPEN) {
-        joined = true;
-        console.log(color)
-        socket.send(JSON.stringify({
-          type: 'join',
-          gameCode,
-          requestedColor
-        }));
-        if (typeof unsubscribe === 'function') {
-          unsubscribe();
-        }
+      const response = await fetch(`/api/game-exists?gameCode=${gameCode}`);
+      if (!response.ok) {
+        // Redirect if the game doesn't exist.
+        goto('/?error=Game not found. Please create a game using the home page.', { replaceState: true });
+        return;
       }
-    });
+      // If it exists, we remove any loading overlay and initialize.
+      loading = false;
+      board = Chessboard('myBoard', {
+        orientation: requestedColor,
+        draggable: true,
+        position: 'start',
+        onDragStart,
+        onDrop,
+        onSnapEnd,
+        pieceTheme: '/chessboard/img/chesspieces/wikipedia/{piece}.png'
+      });
 
-    messages.subscribe((allMsgs) => {
-      const latest = allMsgs[allMsgs.length - 1];
-      if (!latest) return;
-      handleServerMessage(latest);
-    });
+      // Update WebSocket connection to use current host & port.
+      connectWebSocket(`ws://${window.location.host}`); //REMOVE "/ws" FOR PRODUCTION
+
+      playerId = getOrCreatePlayerId();
+
+      // Subscribe once to the WebSocket store.
+      unsubscribe = ws.subscribe(socket => {
+        if (!joined && socket && socket.readyState === WebSocket.OPEN) {
+          joined = true;
+          console.log(color)
+          socket.send(JSON.stringify({
+            type: 'join',
+            gameCode,
+            playerId,
+            requestedColor
+          }));
+        }
+      });
+
+      unsubMessages = messages.subscribe((allMsgs) => {
+        if (!allMsgs || !allMsgs.length) return;
+        const latest = allMsgs[allMsgs.length - 1];
+        if (!latest) return;
+        handleServerMessage(latest);
+      });
   });
 
   onDestroy(() => {
-    // Clean up the subscription when the component is unmounted.
-    isMounted = false;
-    if (typeof unsubscribe === 'function') {
-      unsubscribe();
-    }
-    // Also destroy the chessboard instance if it has a destroy method.
+    // Unsubscribe from both stores
+    if (typeof unsubscribe === 'function') unsubscribe();
+    if (typeof unsubMessages === 'function') unsubMessages();
+
+    // Clean up the chessboard instance if it has a destroy method
     if (board && typeof board.destroy === 'function') {
       board.destroy();
     }
-    // Optionally, set board to null
     board = null;
+
+    // Now let's get the actual WebSocket from the store so we can close it
+    let actualSocket;
+    ws.update((currentSocket) => {
+      actualSocket = currentSocket;
+      return currentSocket;
+    });
+
+    if (actualSocket && actualSocket.readyState === WebSocket.OPEN) {
+      // Optionally tell the server we’re leaving
+      actualSocket.send(JSON.stringify({
+        type: 'leave',
+        playerId,
+        gameCode,
+      }));
+      // Then close
+      actualSocket.close();
+    }
   });
 
 
@@ -167,7 +203,7 @@
 </style>
 
 <main>
-  <h1>{color ? color : 'Awaiting color...'} Board</h1>
+  <h1>{color ? color : 'Awaiting color...'} Board :)</h1>
     <div id="myBoard" style="width:400px;"></div>
   
   <div>
